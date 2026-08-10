@@ -1,7 +1,7 @@
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import type { CompanyProfile, Client, Invoice, Payment } from '../db/types'
-import { computeInvoiceTotals, invoiceReceivedAmount, invoiceTotal, itemTotal } from './calculations'
+import { computeInvoiceTotals, itemTotal } from './calculations'
 import { formatCurrency, formatDate, paymentMethodLabel } from './format'
 
 const MARGIN = 40
@@ -135,7 +135,7 @@ export function generateInvoicePdf(invoice: Invoice, client: Client | undefined,
 
   autoTable(doc, {
     startY: y,
-    head: [['Artigo', 'Preço', 'Qtd', 'Valor']],
+    head: [['Serviço', 'Preço', 'Qtd', 'Valor']],
     body: rows,
     margin: { left: MARGIN, right: MARGIN },
     styles: { fontSize: 9, cellPadding: 6 },
@@ -166,20 +166,7 @@ export function generateInvoicePdf(invoice: Invoice, client: Client | undefined,
   doc.setTextColor(20)
   doc.text('Total', totalsX - 140, y + 4, { align: 'left' })
   doc.text(formatCurrency(totals.total), totalsX, y + 4, { align: 'right' })
-  y += 26
-
-  const received = invoiceReceivedAmount(invoice, payments)
-  const saldoDevedor = invoiceTotal(invoice) - received
-  if (saldoDevedor > 0.009) {
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(12)
-    doc.setTextColor(180, 60, 20)
-    doc.text('Saldo devedor', totalsX - 210, y + 4, { align: 'left' })
-    doc.text(formatCurrency(saldoDevedor), totalsX, y + 4, { align: 'right' })
-    y += 30
-  } else {
-    y += 4
-  }
+  y += 30
 
   if (invoice.installments.length > 1) {
     doc.setFont('helvetica', 'bold')
