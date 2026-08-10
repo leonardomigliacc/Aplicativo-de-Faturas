@@ -30,7 +30,7 @@ export default function ClientDetail() {
 
   async function handleDelete() {
     if (!id) return
-    if (!confirm(`Excluir o cliente "${client!.name}"? As faturas associadas não serão apagadas.`)) return
+    if (!confirm(`Excluir o cliente "${client!.name}"? Os orçamentos associados não serão apagados.`)) return
     await db.clients.update(id, { deletedAt: new Date().toISOString() })
     navigate('/clients')
   }
@@ -66,27 +66,27 @@ export default function ClientDetail() {
               <p className="text-sm font-semibold text-amber-600">{formatCurrency(Math.max(totals.pending, 0))}</p>
             </Card>
             <Card className="p-3">
-              <p className="text-xs text-slate-400">Faturado</p>
+              <p className="text-xs text-slate-400">Orçado</p>
               <p className="text-sm font-semibold text-slate-700">{formatCurrency(totals.billed)}</p>
             </Card>
           </div>
         )}
 
         <div className="flex items-center justify-between mb-2">
-          <h2 className="text-sm font-semibold text-slate-500">Faturas</h2>
+          <h2 className="text-sm font-semibold text-slate-500">Orçamentos</h2>
           <Link to="/invoices/new" state={{ clientId: id }} className="text-sm text-blue-600 font-medium">
-            + Nova fatura
+            + Novo orçamento
           </Link>
         </div>
 
-        {invoices && invoices.length === 0 && <EmptyState title="Nenhuma fatura para este cliente" />}
+        {invoices && invoices.length === 0 && <EmptyState title="Nenhum orçamento para este cliente" />}
 
         <div className="space-y-2">
           {invoices?.map((inv) => (
             <Link key={inv.id} to={`/invoices/${inv.id}`}>
               <Card className="flex items-center justify-between active:bg-slate-50">
                 <div>
-                  <p className="font-medium text-slate-900">Fatura #{inv.number}</p>
+                  <p className="font-medium text-slate-900">Orçamento #{inv.number}</p>
                   <p className="text-xs text-slate-400">Vencimento {formatDate(inv.dueDate)}</p>
                 </div>
                 <div className="text-right">

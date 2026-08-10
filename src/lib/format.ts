@@ -13,7 +13,11 @@ export function todayIso(): string {
 }
 
 export function invoicePdfFileName(invoice: { number: number }): string {
-  return `fatura-${invoice.number}.pdf`
+  return `orcamento-${invoice.number}.pdf`
+}
+
+export function receiptPdfFileName(invoice: { number: number }, paymentDate: string): string {
+  return `recibo-orcamento-${invoice.number}-${paymentDate}.pdf`
 }
 
 export function statusLabel(status: string): string {

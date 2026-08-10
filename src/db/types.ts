@@ -75,6 +75,7 @@ export interface CompanyProfile {
   logoDataUrl?: string
   signatureDataUrl?: string
   pixKey?: string
+  website?: string
   invoiceNotes?: string
   nextInvoiceNumber: number
   updatedAt: string

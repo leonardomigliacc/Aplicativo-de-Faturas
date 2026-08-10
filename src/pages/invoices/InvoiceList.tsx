@@ -32,7 +32,7 @@ export default function InvoiceList() {
 
   return (
     <>
-      <PageHeader title="Faturas" />
+      <PageHeader title="Orçamentos" />
       <Page>
         <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as InvoiceStatus | 'todas')} className="mb-4">
           <option value="todas">Todos os status</option>
@@ -44,7 +44,7 @@ export default function InvoiceList() {
           <option value="cancelado">Cancelado</option>
         </Select>
 
-        {data && filtered.length === 0 && <EmptyState title="Nenhuma fatura encontrada" subtitle='Toque em "Nova" para criar sua primeira fatura' />}
+        {data && filtered.length === 0 && <EmptyState title="Nenhum orçamento encontrado" subtitle='Toque em "Nova" para criar seu primeiro orçamento' />}
 
         <div className="space-y-2">
           {filtered.map(({ invoice, status, client }) => (

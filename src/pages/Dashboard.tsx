@@ -55,15 +55,17 @@ export default function Dashboard() {
       <Page>
         {!data ? null : !data.hasAny ? (
           <EmptyState
-            title="Nenhuma fatura ainda"
-            subtitle="Cadastre um cliente e crie sua primeira fatura para ver o resumo financeiro aqui."
+            title="Nenhum orçamento ainda"
+            subtitle="Cadastre um cliente e crie seu primeiro orçamento para ver o resumo financeiro aqui."
           />
         ) : (
           <>
-            <Card className="mb-4 bg-blue-600 text-white border-blue-600">
-              <p className="text-xs text-blue-100">Recebido este mês</p>
-              <p className="text-3xl font-bold mt-1">{formatCurrency(data.receivedThisMonth)}</p>
-              <p className="text-xs text-blue-100 mt-1">Total recebido: {formatCurrency(data.received)}</p>
+            <Card className="mb-4">
+              <p className="text-xs font-medium text-slate-500">Recebido este mês</p>
+              <p className="text-3xl font-bold mt-1 text-slate-900">{formatCurrency(data.receivedThisMonth)}</p>
+              <p className="text-xs text-slate-500 mt-1">
+                Total recebido: <span className="font-semibold text-slate-900">{formatCurrency(data.received)}</span>
+              </p>
             </Card>
 
             <div className="grid grid-cols-2 gap-3 mb-4">
@@ -78,7 +80,7 @@ export default function Dashboard() {
             </div>
 
             <div className="flex items-center justify-between mb-2">
-              <h2 className="text-sm font-semibold text-slate-500">Faturas recentes</h2>
+              <h2 className="text-sm font-semibold text-slate-500">Orçamentos recentes</h2>
               <Link to="/invoices" className="text-sm text-blue-600 font-medium">
                 Ver todas
               </Link>
@@ -112,7 +114,7 @@ export default function Dashboard() {
           </Link>
           <Link to="/invoices/new">
             <Card className="text-center active:bg-slate-50">
-              <p className="text-sm font-semibold text-slate-700">+ Nova fatura</p>
+              <p className="text-sm font-semibold text-slate-700">+ Novo orçamento</p>
             </Card>
           </Link>
         </div>

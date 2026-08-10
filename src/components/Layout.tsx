@@ -3,7 +3,7 @@ import clsx from 'clsx'
 
 const tabs = [
   { to: '/', label: 'Início', icon: HomeIcon, end: true },
-  { to: '/invoices', label: 'Faturas', icon: InvoiceIcon, end: false },
+  { to: '/invoices', label: 'Orçamentos', icon: InvoiceIcon, end: false },
   { to: '/clients', label: 'Clientes', icon: UsersIcon, end: false },
   { to: '/settings', label: 'Ajustes', icon: GearIcon, end: false },
 ]

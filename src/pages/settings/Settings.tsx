@@ -34,6 +34,7 @@ function CompanySection({ company }: { company: CompanyProfile }) {
     phone: company.phone ?? '',
     address: company.address ?? '',
     pixKey: company.pixKey ?? '',
+    website: company.website ?? '',
     invoiceNotes: company.invoiceNotes ?? '',
   })
   const [logo, setLogo] = useState(company.logoDataUrl)
@@ -59,6 +60,14 @@ function CompanySection({ company }: { company: CompanyProfile }) {
     if (!file) return
     const dataUrl = await resizeImageFile(file, 300, 300)
     setLogo(dataUrl)
+  }
+
+  async function handleSignatureImageChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const dataUrl = await resizeImageFile(file, 500, 250)
+    padRef.current?.clear()
+    setSignature(dataUrl)
   }
 
   function saveDrawnSignature() {
@@ -116,16 +125,30 @@ function CompanySection({ company }: { company: CompanyProfile }) {
       <Field label="Chave Pix">
         <Input value={form.pixKey} onChange={(e) => setForm({ ...form, pixKey: e.target.value })} placeholder="CPF, e-mail, telefone ou chave aleatória" />
       </Field>
-      <Field label="Observações padrão nas faturas">
+      <Field label="Site / Instagram" hint="Aparece no rodapé dos orçamentos em PDF">
+        <Input value={form.website} onChange={(e) => setForm({ ...form, website: e.target.value })} placeholder="https://seusite.com.br" />
+      </Field>
+      <Field label="Observações padrão nos orçamentos">
         <Textarea value={form.invoiceNotes} onChange={(e) => setForm({ ...form, invoiceNotes: e.target.value })} placeholder="Ex: condições de pagamento" />
       </Field>
 
-      <Field label="Assinatura">
+      <Field label="Assinatura" hint="Desenhe no quadro abaixo ou importe uma foto/imagem da sua assinatura.">
+        {signature && (
+          <div className="mb-2 border border-slate-200 rounded-xl p-2 bg-slate-50">
+            <img src={signature} alt="Assinatura atual" className="h-16 object-contain mx-auto" />
+          </div>
+        )}
         <canvas ref={canvasRef} className="w-full h-32 border border-slate-300 rounded-xl touch-none" onPointerUp={saveDrawnSignature} />
         <div className="flex gap-2 mt-2">
           <Button type="button" variant="secondary" onClick={clearSignature}>
             Limpar
           </Button>
+          <label>
+            <span className="inline-flex items-center justify-center rounded-xl px-4 py-2.5 text-sm font-semibold bg-slate-100 text-slate-700 active:bg-slate-200 cursor-pointer">
+              Importar imagem
+            </span>
+            <input type="file" accept="image/*" onChange={handleSignatureImageChange} className="hidden" />
+          </label>
         </div>
       </Field>
 
@@ -151,7 +174,7 @@ function BackupSection() {
     setBusy(true)
     try {
       const result = await importBackup(file)
-      setMessage(`Restaurado: ${result.clients} clientes, ${result.invoices} faturas, ${result.payments} pagamentos.`)
+      setMessage(`Restaurado: ${result.clients} clientes, ${result.invoices} orçamentos, ${result.payments} pagamentos.`)
     } catch {
       setMessage('Não foi possível importar este arquivo.')
     } finally {
@@ -224,7 +247,7 @@ function SyncSection({ sync }: { sync: SyncSettings }) {
 function AboutSection() {
   return (
     <Card className="mb-8 text-center">
-      <p className="text-sm text-slate-400">Faturas · funciona offline · seus dados ficam neste dispositivo</p>
+      <p className="text-sm text-slate-400">Orçamentos · funciona offline · seus dados ficam neste dispositivo</p>
     </Card>
   )
 }

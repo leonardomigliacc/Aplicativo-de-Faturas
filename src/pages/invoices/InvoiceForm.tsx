@@ -23,9 +23,9 @@ export default function InvoiceForm() {
   const [issueDate, setIssueDate] = useState(todayIso())
   const [dueDate, setDueDate] = useState(todayIso())
   const [items, setItems] = useState<InvoiceItem[]>([emptyItem()])
-  const [discount, setDiscount] = useState<AdjustmentValue>({ type: 'percent', value: 0 })
-  const [tax, setTax] = useState<AdjustmentValue>({ type: 'percent', value: 0 })
-  const [surcharge, setSurcharge] = useState<AdjustmentValue>({ type: 'percent', value: 0 })
+  const [discount, setDiscount] = useState<AdjustmentValue>({ type: 'fixed', value: 0 })
+  const [tax, setTax] = useState<AdjustmentValue>({ type: 'fixed', value: 0 })
+  const [surcharge, setSurcharge] = useState<AdjustmentValue>({ type: 'fixed', value: 0 })
   const [installmentsCount, setInstallmentsCount] = useState(1)
   const [installmentInterval, setInstallmentInterval] = useState(30)
   const [notes, setNotes] = useState('')
@@ -128,7 +128,7 @@ export default function InvoiceForm() {
 
   return (
     <>
-      <PageHeader title={isEdit ? `Editar fatura` : 'Nova fatura'} back={isEdit ? `/invoices/${id}` : '/invoices'} />
+      <PageHeader title={isEdit ? 'Editar orçamento' : 'Novo orçamento'} back={isEdit ? `/invoices/${id}` : '/invoices'} />
       <Page>
         <form onSubmit={handleSubmit} className="pb-4">
           <Field label="Cliente *">
@@ -166,16 +166,16 @@ export default function InvoiceForm() {
                     type="number"
                     min={0}
                     step="0.01"
-                    value={item.quantity}
-                    onChange={(e) => updateItem(item.id, { quantity: Number(e.target.value) })}
+                    value={item.quantity === 0 ? '' : item.quantity}
+                    onChange={(e) => updateItem(item.id, { quantity: e.target.value === '' ? 0 : Number(e.target.value) })}
                     placeholder="Qtd"
                   />
                   <Input
                     type="number"
                     min={0}
                     step="0.01"
-                    value={item.unitPrice}
-                    onChange={(e) => updateItem(item.id, { unitPrice: Number(e.target.value) })}
+                    value={item.unitPrice === 0 ? '' : item.unitPrice}
+                    onChange={(e) => updateItem(item.id, { unitPrice: e.target.value === '' ? 0 : Number(e.target.value) })}
                     placeholder="Preço unit."
                   />
                   <div className="flex items-center justify-between">
@@ -204,7 +204,7 @@ export default function InvoiceForm() {
           <h2 className="text-sm font-semibold text-slate-500 mb-2">Parcelamento</h2>
           {hasPayments ? (
             <p className="text-xs text-amber-600 mb-3 bg-amber-50 rounded-lg p-2">
-              Esta fatura já tem pagamentos registrados. O número de parcelas fica bloqueado; os valores serão redistribuídos mantendo a
+              Este orçamento já tem pagamentos registrados. O número de parcelas fica bloqueado; os valores serão redistribuídos mantendo a
               quantidade atual.
             </p>
           ) : (
@@ -246,7 +246,7 @@ export default function InvoiceForm() {
           </Card>
 
           <Button type="submit" full disabled={saving}>
-            {saving ? 'Salvando…' : 'Salvar fatura'}
+            {saving ? 'Salvando…' : 'Salvar orçamento'}
           </Button>
         </form>
       </Page>
@@ -262,13 +262,14 @@ function AdjustmentRow({ label, value, onChange }: { label: string; value: Adjus
         type="number"
         min={0}
         step="0.01"
-        value={value.value}
-        onChange={(e) => onChange({ ...value, value: Number(e.target.value) })}
+        value={value.value === 0 ? '' : value.value}
+        onChange={(e) => onChange({ ...value, value: e.target.value === '' ? 0 : Number(e.target.value) })}
+        placeholder="0"
         className="flex-1"
       />
       <Select value={value.type} onChange={(e) => onChange({ ...value, type: e.target.value as AdjustmentValue['type'] })} className="w-24">
-        <option value="percent">%</option>
         <option value="fixed">R$</option>
+        <option value="percent">%</option>
       </Select>
     </div>
   )

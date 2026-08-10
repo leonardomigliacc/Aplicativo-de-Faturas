@@ -3,10 +3,10 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { db, ensureCompanyProfile } from '../../db/db'
 import { Page, PageHeader, Card, Button, Badge, Sheet, Field, Input, Select, Textarea } from '../../components/ui'
-import { formatCurrency, formatDate, invoicePdfFileName, paymentMethodLabel, statusColor, statusLabel, todayIso } from '../../lib/format'
+import { formatCurrency, formatDate, invoicePdfFileName, paymentMethodLabel, receiptPdfFileName, statusColor, statusLabel, todayIso } from '../../lib/format'
 import { computeInvoiceStatus, computeInvoiceTotals, getInstallmentPaymentInfo, invoiceReceivedAmount, invoiceTotal, itemTotal } from '../../lib/calculations'
 import { whatsappLink, mailtoLink, shareInvoicePdf, downloadPdf } from '../../lib/share'
-import type { PaymentMethod } from '../../db/types'
+import type { Payment, PaymentMethod } from '../../db/types'
 
 export default function InvoiceDetail() {
   const { id } = useParams()
@@ -14,6 +14,7 @@ export default function InvoiceDetail() {
   const [paySheetOpen, setPaySheetOpen] = useState(false)
   const [selectedInstallmentId, setSelectedInstallmentId] = useState<string | null>(null)
   const [shareBusy, setShareBusy] = useState(false)
+  const [receiptBusyId, setReceiptBusyId] = useState<string | null>(null)
 
   const invoice = useLiveQuery(() => (id ? db.invoices.get(id) : undefined), [id])
   const client = useLiveQuery(() => (invoice ? db.clients.get(invoice.clientId) : undefined), [invoice])
@@ -61,13 +62,30 @@ export default function InvoiceDetail() {
     downloadPdf(doc, invoicePdfFileName(invoice!))
   }
 
+  async function handleReceipt(payment: Payment) {
+    setReceiptBusyId(payment.id)
+    try {
+      const [{ generateReceiptPdf }, { shareReceiptPdf }] = await Promise.all([import('../../lib/pdf'), import('../../lib/share')])
+      const company = await ensureCompanyProfile()
+      const doc = generateReceiptPdf(invoice!, client, company, payment)
+      const result = await shareReceiptPdf(doc, invoice!, client, payment, receiptPdfFileName(invoice!, payment.date))
+      if (result === 'downloaded') {
+        alert('O recibo foi baixado. Use os botões acima para abrir o WhatsApp ou e-mail e anexe o arquivo baixado.')
+      }
+    } catch (err) {
+      if ((err as Error)?.name !== 'AbortError') alert('Não foi possível gerar o recibo.')
+    } finally {
+      setReceiptBusyId(null)
+    }
+  }
+
   async function handleCancel() {
-    if (!confirm('Cancelar esta fatura? Ela deixará de contar como pendente ou atrasada.')) return
+    if (!confirm('Cancelar este orçamento? Ele deixará de contar como pendente ou atrasado.')) return
     await db.invoices.update(invoice!.id, { status: 'cancelado', updatedAt: new Date().toISOString() })
   }
 
   async function handleDelete() {
-    if (!confirm('Excluir esta fatura permanentemente da lista?')) return
+    if (!confirm('Excluir este orçamento permanentemente da lista?')) return
     await db.invoices.update(invoice!.id, { deletedAt: new Date().toISOString() })
     navigate('/invoices')
   }
@@ -75,7 +93,7 @@ export default function InvoiceDetail() {
   return (
     <>
       <PageHeader
-        title={`Fatura #${invoice.number}`}
+        title={`Orçamento #${invoice.number}`}
         back="/invoices"
         right={
           <Link to={`/invoices/${invoice.id}/edit`} className="text-sm text-blue-600 font-medium">
@@ -207,8 +225,23 @@ export default function InvoiceDetail() {
                       {p.notes ? ` · ${p.notes}` : ''}
                     </p>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-3">
                     <span className="text-sm font-medium text-green-600">{formatCurrency(p.amount)}</span>
+                    <button
+                      className="text-slate-400 p-1"
+                      aria-label="Gerar recibo"
+                      disabled={receiptBusyId === p.id}
+                      onClick={() => handleReceipt(p)}
+                    >
+                      {receiptBusyId === p.id ? (
+                        <span className="text-xs">…</span>
+                      ) : (
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M6 2h12v20l-3-2-3 2-3-2-3 2z" strokeLinecap="round" strokeLinejoin="round" />
+                          <path d="M9 8h6M9 12h6" strokeLinecap="round" />
+                        </svg>
+                      )}
+                    </button>
                     <button
                       className="text-slate-300 p-1"
                       aria-label="Remover pagamento"
@@ -239,7 +272,7 @@ export default function InvoiceDetail() {
         <div className="flex gap-2 mb-8">
           {invoice.status !== 'cancelado' && (
             <Button variant="secondary" full onClick={handleCancel}>
-              Cancelar fatura
+              Cancelar orçamento
             </Button>
           )}
           <Button variant="danger" full onClick={handleDelete}>

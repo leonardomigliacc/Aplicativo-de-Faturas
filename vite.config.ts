@@ -25,9 +25,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'icons/*.png'],
       manifest: {
-        name: 'Faturas - Gestão de Clientes e Cobranças',
-        short_name: 'Faturas',
-        description: 'Crie faturas, controle pagamentos e acompanhe recebimentos.',
+        name: 'Orçamentos - Gestão de Clientes e Orçamentos',
+        short_name: 'Orçamentos',
+        description: 'Crie orçamentos, controle pagamentos e acompanhe recebimentos.',
         theme_color: '#2563eb',
         background_color: '#ffffff',
         display: 'standalone',
