@@ -286,19 +286,26 @@ function AdjustmentRow({ label, value, onChange }: { label: string; value: Adjus
   return (
     <div className="flex items-center gap-2">
       <span className="text-sm text-slate-600 w-20 shrink-0">{label}</span>
-      <Input
-        type="number"
-        min={0}
-        step="0.01"
-        value={value.value === 0 ? '' : value.value}
-        onChange={(e) => onChange({ ...value, value: e.target.value === '' ? 0 : Number(e.target.value) })}
-        placeholder="0"
-        className="flex-1"
-      />
-      <Select value={value.type} onChange={(e) => onChange({ ...value, type: e.target.value as AdjustmentValue['type'] })} className="w-24">
-        <option value="fixed">R$</option>
-        <option value="percent">%</option>
-      </Select>
+      {/* Wrapped in plain divs: Input/Select already carry a baked-in `w-full`, and mixing that
+          with a width utility passed via className is a Tailwind footgun — whichever rule lands
+          later in the generated stylesheet wins, not whichever is written last here, so the two
+          fields ended up with their sizes swapped. Sizing the wrapper instead sidesteps that. */}
+      <div className="flex-[2]">
+        <Input
+          type="number"
+          min={0}
+          step="0.01"
+          value={value.value === 0 ? '' : value.value}
+          onChange={(e) => onChange({ ...value, value: e.target.value === '' ? 0 : Number(e.target.value) })}
+          placeholder="0"
+        />
+      </div>
+      <div className="w-24 shrink-0">
+        <Select value={value.type} onChange={(e) => onChange({ ...value, type: e.target.value as AdjustmentValue['type'] })}>
+          <option value="fixed">R$</option>
+          <option value="percent">%</option>
+        </Select>
+      </div>
     </div>
   )
 }
