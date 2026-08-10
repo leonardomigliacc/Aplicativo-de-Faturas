@@ -3,7 +3,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, ensureCompanyProfile } from '../../db/db'
 import { Page, PageHeader, Field, Input, Select, Textarea, Button, Card } from '../../components/ui'
-import type { AdjustmentValue, Invoice, InvoiceItem } from '../../db/types'
+import type { AdjustmentValue, Invoice, InvoiceItem, ServiceType } from '../../db/types'
 import { computeInvoiceTotals, distributeInstallments } from '../../lib/calculations'
 import { formatCurrency, todayIso } from '../../lib/format'
 
@@ -18,6 +18,10 @@ export default function InvoiceForm() {
   const location = useLocation() as { state?: { clientId?: string } }
 
   const clients = useLiveQuery(() => db.clients.filter((c) => !c.deletedAt).toArray(), [])
+  const serviceTypes = useLiveQuery(async () => {
+    const all = await db.serviceTypes.toArray()
+    return all.sort((a, b) => a.description.localeCompare(b.description))
+  }, [])
 
   const [clientId, setClientId] = useState(location.state?.clientId ?? '')
   const [issueDate, setIssueDate] = useState(todayIso())
@@ -67,6 +71,16 @@ export default function InvoiceForm() {
   }
   function removeItem(itemId: string) {
     setItems((prev) => (prev.length > 1 ? prev.filter((it) => it.id !== itemId) : prev))
+  }
+  function applyServiceType(st: ServiceType) {
+    setItems((prev) => {
+      const last = prev[prev.length - 1]
+      const patch = { description: st.description, unitPrice: st.defaultPrice ?? 0 }
+      if (last && !last.description.trim() && last.unitPrice === 0) {
+        return prev.map((it) => (it.id === last.id ? { ...it, ...patch } : it))
+      }
+      return [...prev, { ...emptyItem(), ...patch }]
+    })
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -152,6 +166,20 @@ export default function InvoiceForm() {
           </div>
 
           <h2 className="text-sm font-semibold text-slate-500 mt-2 mb-2">Itens</h2>
+          {serviceTypes && serviceTypes.length > 0 && (
+            <div className="flex gap-2 mb-3 overflow-x-auto pb-1 -mx-4 px-4">
+              {serviceTypes.map((st) => (
+                <button
+                  key={st.id}
+                  type="button"
+                  onClick={() => applyServiceType(st)}
+                  className="shrink-0 rounded-full border border-blue-200 bg-blue-50 text-blue-700 text-sm font-medium px-3 py-1.5 whitespace-nowrap active:bg-blue-100"
+                >
+                  + {st.description}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="space-y-2 mb-3">
             {items.map((item) => (
               <Card key={item.id} className="p-3">

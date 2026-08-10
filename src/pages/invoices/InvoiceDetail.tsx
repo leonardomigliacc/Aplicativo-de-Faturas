@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { db, ensureCompanyProfile } from '../../db/db'
 import { Page, PageHeader, Card, Button, Badge, Sheet, Field, Input, Select, Textarea } from '../../components/ui'
+import PdfPreviewSheet from '../../components/PdfPreviewSheet'
 import { formatCurrency, formatDate, invoicePdfFileName, paymentMethodLabel, receiptPdfFileName, statusColor, statusLabel, todayIso } from '../../lib/format'
 import { computeInvoiceStatus, computeInvoiceTotals, getInstallmentPaymentInfo, invoiceReceivedAmount, invoiceTotal, itemTotal } from '../../lib/calculations'
 import { whatsappLink, mailtoLink, downloadPdf, sharePdf } from '../../lib/share'
@@ -15,6 +16,7 @@ export default function InvoiceDetail() {
   const [selectedInstallmentId, setSelectedInstallmentId] = useState<string | null>(null)
   const [shareBusy, setShareBusy] = useState<'whatsapp' | 'email' | 'generic' | null>(null)
   const [previewBusy, setPreviewBusy] = useState(false)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [receiptBusyId, setReceiptBusyId] = useState<string | null>(null)
 
   const invoice = useLiveQuery(() => (id ? db.invoices.get(id) : undefined), [id])
@@ -73,23 +75,25 @@ export default function InvoiceDetail() {
   }
 
   async function handlePreview() {
-    // Open the tab synchronously, in direct response to the click, so Safari doesn't block it
-    // as a popup — we fill in its location once the PDF (loaded via dynamic import) is ready.
-    const previewWindow = window.open('', '_blank')
+    // Render the PDF inline (iframe over the current page) instead of window.open: opening a new
+    // tab/window is unreliable inside an installed iOS PWA (standalone mode has no tab chrome to
+    // open into, and window.open can silently fail or throw there).
     setPreviewBusy(true)
     try {
       const { generateInvoicePdf } = await import('../../lib/pdf')
       const company = await ensureCompanyProfile()
       const doc = generateInvoicePdf(invoice!, client, company, payments!)
-      const url = URL.createObjectURL(doc.output('blob'))
-      if (previewWindow) previewWindow.location.href = url
-      else window.open(url, '_blank')
+      setPreviewUrl(URL.createObjectURL(doc.output('blob')))
     } catch {
-      previewWindow?.close()
       alert('Não foi possível gerar a visualização.')
     } finally {
       setPreviewBusy(false)
     }
+  }
+
+  function closePreview() {
+    if (previewUrl) URL.revokeObjectURL(previewUrl)
+    setPreviewUrl(null)
   }
 
   async function handleReceipt(payment: Payment) {
@@ -318,6 +322,8 @@ export default function InvoiceDetail() {
         payments={payments}
         preselectedInstallmentId={selectedInstallmentId}
       />
+
+      <PdfPreviewSheet url={previewUrl} title={`Orçamento #${invoice.number}`} onClose={closePreview} />
     </>
   )
 }

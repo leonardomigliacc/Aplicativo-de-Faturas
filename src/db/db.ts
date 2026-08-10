@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie'
-import type { Client, Invoice, Payment, CompanyProfile, SyncSettings } from './types'
+import type { Client, Invoice, Payment, CompanyProfile, SyncSettings, ServiceType } from './types'
 
 export class AppDatabase extends Dexie {
   clients!: Table<Client, string>
@@ -7,6 +7,7 @@ export class AppDatabase extends Dexie {
   payments!: Table<Payment, string>
   company!: Table<CompanyProfile, string>
   syncSettings!: Table<SyncSettings, string>
+  serviceTypes!: Table<ServiceType, string>
 
   constructor() {
     super('faturas-db')
@@ -16,6 +17,14 @@ export class AppDatabase extends Dexie {
       payments: 'id, invoiceId, installmentId, date',
       company: 'id',
       syncSettings: 'id',
+    })
+    this.version(2).stores({
+      clients: 'id, name, document, deletedAt, updatedAt',
+      invoices: 'id, number, clientId, status, dueDate, deletedAt, updatedAt',
+      payments: 'id, invoiceId, installmentId, date',
+      company: 'id',
+      syncSettings: 'id',
+      serviceTypes: 'id, description',
     })
   }
 }

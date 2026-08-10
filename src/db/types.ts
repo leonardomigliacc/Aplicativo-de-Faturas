@@ -88,3 +88,10 @@ export interface SyncSettings {
   supabaseAnonKey?: string
   lastSyncedAt?: string
 }
+
+export interface ServiceType {
+  id: string
+  description: string
+  defaultPrice?: number
+  createdAt: string
+}

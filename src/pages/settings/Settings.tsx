@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import SignaturePad from 'signature_pad'
 import { db } from '../../db/db'
-import { Page, PageHeader, Card, Field, Input, Textarea, Button } from '../../components/ui'
+import { Page, PageHeader, Card, Field, Input, Textarea, Button, Sheet } from '../../components/ui'
 import { resizeImageFile } from '../../lib/image'
 import { exportBackup, importBackup } from '../../lib/backup'
+import { formatCurrency } from '../../lib/format'
 import type { CompanyProfile, SyncSettings } from '../../db/types'
 
 export default function Settings() {
@@ -18,6 +19,7 @@ export default function Settings() {
       <PageHeader title="Ajustes" />
       <Page>
         <CompanySection company={company} />
+        <ServiceTypesSection />
         <BackupSection />
         <SyncSection sync={sync} />
         <AboutSection />
@@ -165,6 +167,110 @@ function CompanySection({ company }: { company: CompanyProfile }) {
       <Button onClick={handleSave} full disabled={saving}>
         {savedAt ? 'Salvo ✓' : saving ? 'Salvando…' : 'Salvar dados da empresa'}
       </Button>
+    </Card>
+  )
+}
+
+function ServiceTypesSection() {
+  const serviceTypes = useLiveQuery(async () => {
+    const all = await db.serviceTypes.toArray()
+    return all.sort((a, b) => a.description.localeCompare(b.description))
+  }, [])
+
+  const [sheetOpen, setSheetOpen] = useState(false)
+  const [editing, setEditing] = useState<{ id: string; description: string; defaultPrice: string } | null>(null)
+
+  function openNew() {
+    setEditing({ id: '', description: '', defaultPrice: '' })
+    setSheetOpen(true)
+  }
+
+  function openEdit(st: { id: string; description: string; defaultPrice?: number }) {
+    setEditing({ id: st.id, description: st.description, defaultPrice: st.defaultPrice ? String(st.defaultPrice) : '' })
+    setSheetOpen(true)
+  }
+
+  async function handleSave() {
+    if (!editing || !editing.description.trim()) return
+    const defaultPrice = editing.defaultPrice ? Number(editing.defaultPrice) : undefined
+    if (editing.id) {
+      await db.serviceTypes.update(editing.id, { description: editing.description.trim(), defaultPrice })
+    } else {
+      await db.serviceTypes.put({
+        id: crypto.randomUUID(),
+        description: editing.description.trim(),
+        defaultPrice,
+        createdAt: new Date().toISOString(),
+      })
+    }
+    setSheetOpen(false)
+    setEditing(null)
+  }
+
+  async function handleDelete(id: string) {
+    if (!confirm('Excluir este tipo de serviço?')) return
+    await db.serviceTypes.delete(id)
+  }
+
+  return (
+    <Card className="mb-4">
+      <h2 className="font-semibold text-slate-900 mb-1">Tipos de serviço</h2>
+      <p className="text-sm text-slate-400 mb-3">
+        Cadastre serviços que você oferece com frequência para adicioná-los rapidamente ao criar um orçamento. Você ainda pode escrever
+        qualquer item na hora, sem precisar cadastrar antes.
+      </p>
+
+      {serviceTypes && serviceTypes.length > 0 && (
+        <div className="space-y-2 mb-3">
+          {serviceTypes.map((st) => (
+            <div key={st.id} className="flex items-center justify-between rounded-xl border border-slate-200 p-3">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-slate-800 truncate">{st.description}</p>
+                {st.defaultPrice != null && <p className="text-xs text-slate-400">{formatCurrency(st.defaultPrice)}</p>}
+              </div>
+              <div className="flex items-center gap-3 shrink-0 ml-2">
+                <button type="button" className="text-xs text-blue-600 font-medium" onClick={() => openEdit(st)}>
+                  Editar
+                </button>
+                <button type="button" className="text-xs text-red-500 font-medium" onClick={() => handleDelete(st.id)}>
+                  Excluir
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <Button variant="secondary" full onClick={openNew}>
+        + Adicionar tipo de serviço
+      </Button>
+
+      <Sheet open={sheetOpen} onClose={() => setSheetOpen(false)} title={editing?.id ? 'Editar tipo de serviço' : 'Novo tipo de serviço'}>
+        {editing && (
+          <>
+            <Field label="Descrição *">
+              <Input
+                value={editing.description}
+                onChange={(e) => setEditing({ ...editing, description: e.target.value })}
+                placeholder="Ex: Instalação de piso laminado"
+              />
+            </Field>
+            <Field label="Preço padrão" hint="Opcional. Você pode ajustar o valor em cada orçamento.">
+              <Input
+                type="number"
+                min={0}
+                step="0.01"
+                value={editing.defaultPrice}
+                onChange={(e) => setEditing({ ...editing, defaultPrice: e.target.value })}
+                placeholder="0.00"
+              />
+            </Field>
+            <Button full onClick={handleSave}>
+              Salvar
+            </Button>
+          </>
+        )}
+      </Sheet>
     </Card>
   )
 }
