@@ -1,55 +1,73 @@
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import type { CompanyProfile, Client, Invoice, Payment } from '../db/types'
-import { computeInvoiceTotals, getInstallmentPaymentInfo, itemTotal } from './calculations'
+import { computeInvoiceTotals, invoiceReceivedAmount, invoiceTotal, itemTotal } from './calculations'
 import { formatCurrency, formatDate, paymentMethodLabel } from './format'
 
 const MARGIN = 40
+const LOGO_SIZE = 64
+const HEADER_TOP_Y = 50
 
-function drawHeader(doc: jsPDF, company: CompanyProfile, title: string, docNumber: string, date: string): number {
+function drawHeader(doc: jsPDF, company: CompanyProfile, title: string): number {
   const pageWidth = doc.internal.pageSize.getWidth()
-  let y = 46
+  let y = HEADER_TOP_Y
+
+  doc.setTextColor(20)
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(24)
+  doc.text(title, MARGIN, y)
 
   if (company.logoDataUrl) {
     try {
-      doc.addImage(company.logoDataUrl, 'PNG', MARGIN, y - 10, 56, 56)
+      doc.addImage(company.logoDataUrl, 'PNG', pageWidth - MARGIN - LOGO_SIZE, y - LOGO_SIZE + 12, LOGO_SIZE, LOGO_SIZE)
     } catch {
       // ignore malformed image
     }
   }
 
-  const textX = company.logoDataUrl ? MARGIN + 68 : MARGIN
+  y += 20
   doc.setFont('helvetica', 'bold')
-  doc.setFontSize(14)
-  doc.text(company.name || 'Sua Empresa', textX, y + 4)
+  doc.setFontSize(12)
+  doc.setTextColor(30)
+  doc.text(company.name || 'Sua Empresa', MARGIN, y)
+
+  y += 14
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(9)
-  doc.setTextColor(90)
-  const companyLines = [company.document, company.email, company.phone, company.address].filter(Boolean) as string[]
-  companyLines.forEach((line, i) => doc.text(line, textX, y + 20 + i * 12))
+  doc.setTextColor(100)
+  const companyLines = [company.website, company.address, company.document, company.phone, company.email].filter(Boolean) as string[]
+  companyLines.forEach((line, i) => doc.text(line, MARGIN, y + i * 12))
+  y += companyLines.length * 12 + 14
 
-  doc.setTextColor(20)
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(20)
-  doc.text(title, pageWidth - MARGIN, 50, { align: 'right' })
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(10)
-  doc.setTextColor(90)
-  doc.text(docNumber, pageWidth - MARGIN, 66, { align: 'right' })
-  doc.text(`Emissão: ${date}`, pageWidth - MARGIN, 80, { align: 'right' })
-
-  y = 130
   doc.setDrawColor(220)
   doc.line(MARGIN, y, pageWidth - MARGIN, y)
-  return y + 22
+  return y + 24
+}
+
+function drawMetaField(doc: jsPDF, x: number, y: number, align: 'left' | 'right', label: string, value: string) {
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(8)
+  doc.setTextColor(130)
+  doc.text(label.toUpperCase(), x, y, { align })
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(11)
+  doc.setTextColor(20)
+  doc.text(value, x, y + 15, { align })
 }
 
 function drawFooter(doc: jsPDF, company: CompanyProfile, startY: number): number {
   const pageWidth = doc.internal.pageSize.getWidth()
   let y = startY
 
+  if (company.name) {
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(10)
+    doc.setTextColor(20)
+    doc.text(company.name, MARGIN, y)
+    y += 16
+  }
+
   if (company.signatureDataUrl) {
-    y += 10
     try {
       doc.addImage(company.signatureDataUrl, 'PNG', MARGIN, y, 120, 50)
       doc.setDrawColor(200)
@@ -78,31 +96,37 @@ export function generateInvoicePdf(invoice: Invoice, client: Client | undefined,
   const doc = new jsPDF({ unit: 'pt', format: 'a4' })
   const pageWidth = doc.internal.pageSize.getWidth()
 
-  let y = drawHeader(doc, company, 'ORÇAMENTO', `Nº ${invoice.number}`, formatDate(invoice.issueDate))
+  let y = drawHeader(doc, company, 'ORÇAMENTO')
 
   doc.setFont('helvetica', 'bold')
-  doc.setFontSize(10)
-  doc.setTextColor(20)
+  doc.setFontSize(9)
+  doc.setTextColor(130)
   doc.text('PARA', MARGIN, y)
-  y += 14
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(11)
+  doc.setTextColor(20)
+  doc.text(client?.name ?? 'Cliente', MARGIN, y + 15)
   doc.setFont('helvetica', 'normal')
-  doc.setTextColor(60)
-  doc.text(client?.name ?? 'Cliente', MARGIN, y)
+  doc.setFontSize(9)
+  doc.setTextColor(90)
   const clientLines = [client?.document, client?.email, client?.phone, client?.address].filter(Boolean) as string[]
-  clientLines.forEach((line, i) => doc.text(line, MARGIN, y + 14 + i * 12))
+  clientLines.forEach((line, i) => doc.text(line, MARGIN, y + 30 + i * 12))
 
-  y += 14 + clientLines.length * 12 + 20
+  drawMetaField(doc, pageWidth - MARGIN, y, 'right', 'Orçamento número', String(invoice.number))
+  drawMetaField(doc, pageWidth - MARGIN, y + 34, 'right', 'Emitido', formatDate(invoice.issueDate))
 
-  const rows = invoice.items.map((item) => [item.description, String(item.quantity), formatCurrency(item.unitPrice), formatCurrency(itemTotal(item))])
+  y += Math.max(30 + clientLines.length * 12, 60) + 20
+
+  const rows = invoice.items.map((item) => [item.description, formatCurrency(item.unitPrice), String(item.quantity), formatCurrency(itemTotal(item))])
 
   autoTable(doc, {
     startY: y,
-    head: [['Descrição', 'Qtd', 'Valor unit.', 'Total']],
+    head: [['Artigo', 'Preço', 'Qtd', 'Valor']],
     body: rows,
     margin: { left: MARGIN, right: MARGIN },
     styles: { fontSize: 9, cellPadding: 6 },
     headStyles: { fillColor: [37, 99, 235], textColor: 255 },
-    columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' } },
+    columnStyles: { 1: { halign: 'center' }, 2: { halign: 'center' }, 3: { halign: 'center' } },
   })
 
   // @ts-expect-error jspdf-autotable augments doc at runtime
@@ -117,6 +141,7 @@ export function generateInvoicePdf(invoice: Invoice, client: Client | undefined,
   if (totals.surchargeAmount > 0) totalRows.push(['Acréscimo', totals.surchargeAmount])
 
   totalRows.forEach(([label, value]) => {
+    doc.setFont('helvetica', 'normal')
     doc.setTextColor(90)
     doc.text(label, totalsX - 140, y, { align: 'left' })
     doc.text(formatCurrency(value), totalsX, y, { align: 'right' })
@@ -127,27 +152,36 @@ export function generateInvoicePdf(invoice: Invoice, client: Client | undefined,
   doc.setTextColor(20)
   doc.text('Total', totalsX - 140, y + 4, { align: 'left' })
   doc.text(formatCurrency(totals.total), totalsX, y + 4, { align: 'right' })
-  y += 30
+  y += 26
 
-  if (invoice.installments.length > 0) {
+  const received = invoiceReceivedAmount(invoice, payments)
+  const saldoDevedor = invoiceTotal(invoice) - received
+  if (saldoDevedor > 0.009) {
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(12)
+    doc.setTextColor(180, 60, 20)
+    doc.text('Saldo devedor', totalsX - 210, y + 4, { align: 'left' })
+    doc.text(formatCurrency(saldoDevedor), totalsX, y + 4, { align: 'right' })
+    y += 30
+  } else {
+    y += 4
+  }
+
+  if (invoice.installments.length > 1) {
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(10)
     doc.setTextColor(20)
     doc.text('PARCELAS', MARGIN, y)
     y += 8
-    const instRows = invoice.installments.map((inst) => {
-      const info = getInstallmentPaymentInfo(inst, payments)
-      const label = info.isPaid ? 'Pago' : info.paid > 0 ? `Parcial (falta ${formatCurrency(info.remaining)})` : info.isOverdue ? 'Atrasado' : 'Pendente'
-      return [`${inst.number}/${invoice.installments.length}`, formatDate(inst.dueDate), formatCurrency(inst.amount), label]
-    })
+    const instRows = invoice.installments.map((inst) => [`${inst.number}/${invoice.installments.length}`, formatDate(inst.dueDate), formatCurrency(inst.amount)])
     autoTable(doc, {
       startY: y + 6,
-      head: [['Parcela', 'Vencimento', 'Valor', 'Situação']],
+      head: [['Parcela', 'Vencimento', 'Valor']],
       body: instRows,
       margin: { left: MARGIN, right: MARGIN },
       styles: { fontSize: 9, cellPadding: 5 },
       headStyles: { fillColor: [241, 245, 249], textColor: 20 },
-      columnStyles: { 2: { halign: 'right' } },
+      columnStyles: { 2: { halign: 'center' } },
     })
     // @ts-expect-error jspdf-autotable augments doc at runtime
     y = doc.lastAutoTable.finalY + 20
@@ -166,7 +200,7 @@ export function generateInvoicePdf(invoice: Invoice, client: Client | undefined,
       margin: { left: MARGIN, right: MARGIN },
       styles: { fontSize: 9, cellPadding: 5 },
       headStyles: { fillColor: [241, 245, 249], textColor: 20 },
-      columnStyles: { 2: { halign: 'right' } },
+      columnStyles: { 2: { halign: 'center' } },
     })
     // @ts-expect-error jspdf-autotable augments doc at runtime
     y = doc.lastAutoTable.finalY + 20
@@ -196,6 +230,17 @@ export function generateInvoicePdf(invoice: Invoice, client: Client | undefined,
     y += 14 + split.length * 12
   }
 
+  y += 16
+  doc.setFont('helvetica', 'italic')
+  doc.setFontSize(8.5)
+  doc.setTextColor(120)
+  const disclaimer = doc.splitTextToSize(
+    'Ao assinar esse documento, o cliente aceita os serviços e condições descritos nesse documento.',
+    pageWidth - MARGIN * 2,
+  )
+  doc.text(disclaimer, MARGIN, y)
+  y += disclaimer.length * 12 + 10
+
   drawFooter(doc, company, y)
 
   return doc
@@ -205,9 +250,8 @@ export function generateReceiptPdf(invoice: Invoice, client: Client | undefined,
   const doc = new jsPDF({ unit: 'pt', format: 'a4' })
   const pageWidth = doc.internal.pageSize.getWidth()
 
-  let y = drawHeader(doc, company, 'RECIBO', `Ref. orçamento Nº ${invoice.number}`, formatDate(payment.date))
-
-  y += 20
+  let y = drawHeader(doc, company, 'RECIBO')
+  y += 6
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(11)
   doc.setTextColor(40)
