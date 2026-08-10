@@ -132,12 +132,21 @@ function CompanySection({ company }: { company: CompanyProfile }) {
         <Textarea value={form.invoiceNotes} onChange={(e) => setForm({ ...form, invoiceNotes: e.target.value })} placeholder="Ex: condições de pagamento" />
       </Field>
 
-      <Field label="Assinatura" hint="Desenhe no quadro abaixo ou importe uma foto/imagem da sua assinatura.">
-        {signature && (
-          <div className="mb-2 border border-slate-200 rounded-xl p-2 bg-slate-50">
-            <img src={signature} alt="Assinatura atual" className="h-16 object-contain mx-auto" />
-          </div>
-        )}
+      {/*
+        Not using <Field>: it wraps children in a <label>, and a <label> auto-activates the first
+        "labelable" descendant (a <button>) whenever any part of it is clicked — including the
+        canvas. That silently fired the "Limpar" button's onClick right after every stroke, wiping
+        the signature the instant it was drawn. This block needs a plain <div> instead.
+      */}
+      <div className="block mb-3">
+        <span className="block text-sm font-medium text-slate-600 mb-1">Assinatura</span>
+        <div className="mb-2 h-20 border border-slate-200 rounded-xl p-2 bg-slate-50 flex items-center justify-center">
+          {signature ? (
+            <img src={signature} alt="Assinatura atual" className="h-16 object-contain" />
+          ) : (
+            <span className="text-xs text-slate-400">Nenhuma assinatura ainda</span>
+          )}
+        </div>
         <canvas ref={canvasRef} className="w-full h-32 border border-slate-300 rounded-xl touch-none" onPointerUp={saveDrawnSignature} />
         <div className="flex gap-2 mt-2">
           <Button type="button" variant="secondary" onClick={clearSignature}>
@@ -150,7 +159,8 @@ function CompanySection({ company }: { company: CompanyProfile }) {
             <input type="file" accept="image/*" onChange={handleSignatureImageChange} className="hidden" />
           </label>
         </div>
-      </Field>
+        <span className="block text-xs text-slate-400 mt-1">Desenhe no quadro acima ou importe uma foto/imagem da sua assinatura.</span>
+      </div>
 
       <Button onClick={handleSave} full disabled={saving}>
         {savedAt ? 'Salvo ✓' : saving ? 'Salvando…' : 'Salvar dados da empresa'}

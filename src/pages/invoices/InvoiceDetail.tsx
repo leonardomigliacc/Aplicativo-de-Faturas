@@ -5,7 +5,7 @@ import { db, ensureCompanyProfile } from '../../db/db'
 import { Page, PageHeader, Card, Button, Badge, Sheet, Field, Input, Select, Textarea } from '../../components/ui'
 import { formatCurrency, formatDate, invoicePdfFileName, paymentMethodLabel, receiptPdfFileName, statusColor, statusLabel, todayIso } from '../../lib/format'
 import { computeInvoiceStatus, computeInvoiceTotals, getInstallmentPaymentInfo, invoiceReceivedAmount, invoiceTotal, itemTotal } from '../../lib/calculations'
-import { whatsappLink, mailtoLink, shareInvoicePdf, downloadPdf } from '../../lib/share'
+import { whatsappLink, mailtoLink, downloadPdf, sharePdf } from '../../lib/share'
 import type { Payment, PaymentMethod } from '../../db/types'
 
 export default function InvoiceDetail() {
@@ -13,7 +13,8 @@ export default function InvoiceDetail() {
   const navigate = useNavigate()
   const [paySheetOpen, setPaySheetOpen] = useState(false)
   const [selectedInstallmentId, setSelectedInstallmentId] = useState<string | null>(null)
-  const [shareBusy, setShareBusy] = useState(false)
+  const [shareBusy, setShareBusy] = useState<'whatsapp' | 'email' | 'generic' | null>(null)
+  const [previewBusy, setPreviewBusy] = useState(false)
   const [receiptBusyId, setReceiptBusyId] = useState<string | null>(null)
 
   const invoice = useLiveQuery(() => (id ? db.invoices.get(id) : undefined), [id])
@@ -38,20 +39,29 @@ export default function InvoiceDetail() {
     setPaySheetOpen(true)
   }
 
-  async function handleShare() {
-    setShareBusy(true)
+  async function handleShareTo(target: 'whatsapp' | 'email' | 'generic') {
+    setShareBusy(target)
     try {
       const { generateInvoicePdf } = await import('../../lib/pdf')
       const company = await ensureCompanyProfile()
       const doc = generateInvoicePdf(invoice!, client, company, payments!)
-      const result = await shareInvoicePdf(doc, invoice!, client, invoicePdfFileName(invoice!))
+      const title = `Orçamento #${invoice!.number}`
+      const text =
+        target === 'whatsapp'
+          ? `Olá${client?.name ? ' ' + client.name : ''}! Segue o orçamento #${invoice!.number} no valor de ${formatCurrency(total)}.`
+          : title
+      const result = await sharePdf(doc, invoicePdfFileName(invoice!), title, text)
       if (result === 'downloaded') {
-        alert('O PDF foi baixado. Use os botões abaixo para abrir o WhatsApp ou e-mail e anexe o arquivo baixado.')
+        // Web Share with files isn't supported here (e.g. desktop browser) — fall back to a
+        // text-only deep link and let the user attach the file that was just downloaded.
+        if (target === 'whatsapp') window.open(whatsappLink(invoice!, client), '_blank')
+        else if (target === 'email') window.location.href = mailtoLink(invoice!, client)
+        else alert('O PDF foi baixado. Anexe o arquivo manualmente no app que preferir.')
       }
     } catch (err) {
       if ((err as Error)?.name !== 'AbortError') alert('Não foi possível compartilhar. Tente baixar o PDF.')
     } finally {
-      setShareBusy(false)
+      setShareBusy(null)
     }
   }
 
@@ -60,6 +70,26 @@ export default function InvoiceDetail() {
     const company = await ensureCompanyProfile()
     const doc = generateInvoicePdf(invoice!, client, company, payments!)
     downloadPdf(doc, invoicePdfFileName(invoice!))
+  }
+
+  async function handlePreview() {
+    // Open the tab synchronously, in direct response to the click, so Safari doesn't block it
+    // as a popup — we fill in its location once the PDF (loaded via dynamic import) is ready.
+    const previewWindow = window.open('', '_blank')
+    setPreviewBusy(true)
+    try {
+      const { generateInvoicePdf } = await import('../../lib/pdf')
+      const company = await ensureCompanyProfile()
+      const doc = generateInvoicePdf(invoice!, client, company, payments!)
+      const url = URL.createObjectURL(doc.output('blob'))
+      if (previewWindow) previewWindow.location.href = url
+      else window.open(url, '_blank')
+    } catch {
+      previewWindow?.close()
+      alert('Não foi possível gerar a visualização.')
+    } finally {
+      setPreviewBusy(false)
+    }
   }
 
   async function handleReceipt(payment: Payment) {
@@ -130,26 +160,25 @@ export default function InvoiceDetail() {
           </div>
         </Card>
 
-        <div className="grid grid-cols-2 gap-2 mb-4">
+        <div className="grid grid-cols-2 gap-2 mb-2">
+          <Button variant="secondary" onClick={handlePreview} disabled={previewBusy}>
+            {previewBusy ? 'Abrindo…' : 'Visualizar PDF'}
+          </Button>
           <Button variant="secondary" onClick={handleDownload}>
             Baixar PDF
           </Button>
-          <Button onClick={handleShare} disabled={shareBusy}>
-            {shareBusy ? 'Preparando…' : 'Compartilhar PDF'}
-          </Button>
         </div>
         <div className="grid grid-cols-2 gap-2 mb-4">
-          <a href={whatsappLink(invoice, client)} target="_blank" rel="noreferrer">
-            <Button variant="secondary" full>
-              WhatsApp
-            </Button>
-          </a>
-          <a href={mailtoLink(invoice, client)}>
-            <Button variant="secondary" full>
-              E-mail
-            </Button>
-          </a>
+          <Button variant="secondary" onClick={() => handleShareTo('whatsapp')} disabled={shareBusy !== null}>
+            {shareBusy === 'whatsapp' ? 'Preparando…' : 'WhatsApp'}
+          </Button>
+          <Button variant="secondary" onClick={() => handleShareTo('email')} disabled={shareBusy !== null}>
+            {shareBusy === 'email' ? 'Preparando…' : 'E-mail'}
+          </Button>
         </div>
+        <Button onClick={() => handleShareTo('generic')} disabled={shareBusy !== null} full className="mb-4">
+          {shareBusy === 'generic' ? 'Preparando…' : 'Compartilhar PDF'}
+        </Button>
 
         <h2 className="text-sm font-semibold text-slate-500 mb-2">Itens</h2>
         <Card className="mb-4 divide-y divide-slate-100">

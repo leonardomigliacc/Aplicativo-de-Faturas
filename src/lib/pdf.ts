@@ -5,43 +5,46 @@ import { computeInvoiceTotals, invoiceReceivedAmount, invoiceTotal, itemTotal } 
 import { formatCurrency, formatDate, paymentMethodLabel } from './format'
 
 const MARGIN = 40
-const LOGO_SIZE = 64
+const LOGO_SIZE = 100
 const HEADER_TOP_Y = 50
 
 function drawHeader(doc: jsPDF, company: CompanyProfile, title: string): number {
   const pageWidth = doc.internal.pageSize.getWidth()
-  let y = HEADER_TOP_Y
+  const y = HEADER_TOP_Y
 
   doc.setTextColor(20)
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(24)
   doc.text(title, MARGIN, y)
 
+  const nameY = y + 20
+  const linesStartY = nameY + 14
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(12)
+  doc.setTextColor(30)
+  doc.text(company.name || 'Sua Empresa', MARGIN, nameY)
+
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(9)
+  doc.setTextColor(100)
+  const companyLines = [company.website, company.address, company.document, company.phone, company.email].filter(Boolean) as string[]
+  companyLines.forEach((line, i) => doc.text(line, MARGIN, linesStartY + i * 12))
+  const textBottom = linesStartY + companyLines.length * 12
+
   if (company.logoDataUrl) {
     try {
-      doc.addImage(company.logoDataUrl, 'PNG', pageWidth - MARGIN - LOGO_SIZE, y - LOGO_SIZE + 12, LOGO_SIZE, LOGO_SIZE)
+      const headerTop = y - 22
+      const logoY = headerTop + Math.max((textBottom - headerTop - LOGO_SIZE) / 2, 0)
+      doc.addImage(company.logoDataUrl, 'PNG', pageWidth - MARGIN - LOGO_SIZE, logoY, LOGO_SIZE, LOGO_SIZE)
     } catch {
       // ignore malformed image
     }
   }
 
-  y += 20
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(12)
-  doc.setTextColor(30)
-  doc.text(company.name || 'Sua Empresa', MARGIN, y)
-
-  y += 14
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(9)
-  doc.setTextColor(100)
-  const companyLines = [company.website, company.address, company.document, company.phone, company.email].filter(Boolean) as string[]
-  companyLines.forEach((line, i) => doc.text(line, MARGIN, y + i * 12))
-  y += companyLines.length * 12 + 14
-
+  const dividerY = textBottom + 14
   doc.setDrawColor(220)
-  doc.line(MARGIN, y, pageWidth - MARGIN, y)
-  return y + 24
+  doc.line(MARGIN, dividerY, pageWidth - MARGIN, dividerY)
+  return dividerY + 24
 }
 
 function drawMetaField(doc: jsPDF, x: number, y: number, align: 'left' | 'right', label: string, value: string) {
@@ -55,31 +58,42 @@ function drawMetaField(doc: jsPDF, x: number, y: number, align: 'left' | 'right'
   doc.text(value, x, y + 15, { align })
 }
 
-function drawFooter(doc: jsPDF, company: CompanyProfile, startY: number): number {
+function drawFooter(doc: jsPDF, company: CompanyProfile, startY: number, clientName?: string): number {
   const pageWidth = doc.internal.pageSize.getWidth()
   let y = startY
+  const gap = 30
+  const colWidth = clientName ? (pageWidth - MARGIN * 2 - gap) / 2 : pageWidth - MARGIN * 2
+  const leftX = MARGIN
+  const rightX = MARGIN + colWidth + gap
 
-  if (company.name) {
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(10)
-    doc.setTextColor(20)
-    doc.text(company.name, MARGIN, y)
-    y += 16
-  }
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(10)
+  doc.setTextColor(20)
+  doc.text(company.name || 'Empresa', leftX, y)
+  if (clientName) doc.text(clientName, rightX, y)
+  y += 16
 
+  const sigBoxTop = y
+  const sigBoxHeight = 54
   if (company.signatureDataUrl) {
     try {
-      doc.addImage(company.signatureDataUrl, 'PNG', MARGIN, y, 120, 50)
-      doc.setDrawColor(200)
-      doc.line(MARGIN, y + 54, MARGIN + 160, y + 54)
-      doc.setFontSize(8)
-      doc.setTextColor(120)
-      doc.text('Assinatura', MARGIN, y + 66)
-      y += 76
+      doc.addImage(company.signatureDataUrl, 'PNG', leftX, sigBoxTop, Math.min(140, colWidth), sigBoxHeight - 4)
     } catch {
       // ignore malformed image
     }
   }
+
+  const lineY = sigBoxTop + sigBoxHeight
+  doc.setDrawColor(200)
+  doc.line(leftX, lineY, leftX + colWidth, lineY)
+  doc.setFontSize(8)
+  doc.setTextColor(120)
+  doc.text('Assinatura', leftX, lineY + 12)
+  if (clientName) {
+    doc.line(rightX, lineY, rightX + colWidth, lineY)
+    doc.text('Assinatura do cliente', rightX, lineY + 12)
+  }
+  y = lineY + 12 + 14
 
   if (company.website) {
     y += 14
@@ -241,7 +255,7 @@ export function generateInvoicePdf(invoice: Invoice, client: Client | undefined,
   doc.text(disclaimer, MARGIN, y)
   y += disclaimer.length * 12 + 10
 
-  drawFooter(doc, company, y)
+  drawFooter(doc, company, y, client?.name)
 
   return doc
 }
