@@ -25,13 +25,13 @@ export function Page({ children }: { children: ReactNode }) {
 }
 
 export function Card({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={clsx('bg-white rounded-2xl border border-slate-200 p-4', className)}>{children}</div>
+  return <div className={clsx('bg-white rounded-2xl border border-slate-200/90 p-4 shadow-sm shadow-slate-200/60 transition-shadow', className)}>{children}</div>
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' | 'ghost' | 'danger'; full?: boolean }>(
   ({ className, variant = 'primary', full, ...props }, ref) => {
     const variants = {
-      primary: 'bg-blue-600 text-white active:bg-blue-700 disabled:bg-blue-300',
+      primary: 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white active:from-blue-700 active:to-indigo-700 disabled:from-blue-300 disabled:to-indigo-300',
       secondary: 'bg-slate-100 text-slate-700 active:bg-slate-200',
       ghost: 'text-blue-600 active:bg-blue-50',
       danger: 'bg-red-50 text-red-600 active:bg-red-100',
@@ -40,7 +40,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLBut
       <button
         ref={ref}
         className={clsx(
-          'inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors disabled:opacity-60',
+          'inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold shadow-sm transition-all active:scale-[.99] disabled:opacity-60',
           variants[variant],
           full && 'w-full',
           className,

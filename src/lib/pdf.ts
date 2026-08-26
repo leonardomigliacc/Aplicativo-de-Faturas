@@ -1,7 +1,7 @@
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import type { CompanyProfile, Client, Invoice, Payment } from '../db/types'
-import { computeInvoiceTotals, itemTotal } from './calculations'
+import { computeInvoiceTotals, invoiceRemaining, itemTotal } from './calculations'
 import { formatCurrency, formatDate, paymentMethodLabel } from './format'
 
 const MARGIN = 40
@@ -131,42 +131,79 @@ export function generateInvoicePdf(invoice: Invoice, client: Client | undefined,
 
   y += Math.max(30 + clientLines.length * 12, 60) + 20
 
-  const rows = invoice.items.map((item) => [item.description, formatCurrency(item.unitPrice), String(item.quantity), formatCurrency(itemTotal(item))])
+  const rows = invoice.items.map((item) => [item.description, String(item.quantity), formatCurrency(item.unitPrice), formatCurrency(itemTotal(item))])
 
   autoTable(doc, {
     startY: y,
-    head: [['Serviço', 'Preço', 'Qtd', 'Valor']],
+    head: [['DESCRIÇÃO DOS PRODUTOS /\nSERVIÇOS', 'QTD', 'VALOR UN.', 'TOTAL']],
     body: rows,
     margin: { left: MARGIN, right: MARGIN },
-    styles: { fontSize: 9, cellPadding: 6 },
-    headStyles: { fillColor: [37, 99, 235], textColor: 255 },
-    columnStyles: { 1: { halign: 'center' }, 2: { halign: 'center' }, 3: { halign: 'center' } },
+    tableWidth: 514,
+    theme: 'grid',
+    styles: {
+      font: 'helvetica',
+      fontSize: 9.5,
+      textColor: [92, 87, 84],
+      lineColor: [215, 210, 206],
+      lineWidth: 0.35,
+      cellPadding: { top: 10, right: 8, bottom: 10, left: 8 },
+      valign: 'middle',
+    },
+    headStyles: {
+      fillColor: [30, 21, 16],
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+      fontSize: 8.5,
+      minCellHeight: 40,
+      lineColor: [92, 82, 76],
+      lineWidth: 0.35,
+      valign: 'middle',
+    },
+    alternateRowStyles: { fillColor: [247, 244, 241] },
+    columnStyles: {
+      0: { cellWidth: 243, halign: 'left' },
+      1: { cellWidth: 48, halign: 'center', textColor: [150, 145, 142] },
+      2: { cellWidth: 105, halign: 'right', textColor: [92, 87, 84] },
+      3: { cellWidth: 118, halign: 'right', textColor: [30, 25, 22], fontStyle: 'bold' },
+    },
   })
 
   // @ts-expect-error jspdf-autotable augments doc at runtime
-  y = doc.lastAutoTable.finalY + 20
+  const tableBottomY = doc.lastAutoTable.finalY
+  doc.setDrawColor(47, 128, 237)
+  doc.setLineWidth(3)
+  doc.line(MARGIN, tableBottomY, pageWidth - MARGIN, tableBottomY)
+  y = tableBottomY + 28
 
   const totals = computeInvoiceTotals(invoice)
   const totalsX = pageWidth - MARGIN
-  doc.setFontSize(9.5)
-  const totalRows: [string, number][] = [['Subtotal', totals.subtotal]]
+  const totalBlockX = pageWidth * 0.5
+  const totalRows: [string, number][] = []
+  if (totals.discountAmount > 0 || totals.taxAmount > 0 || totals.surchargeAmount > 0) totalRows.push(['Subtotal', totals.subtotal])
   if (totals.discountAmount > 0) totalRows.push(['Desconto', -totals.discountAmount])
   if (totals.taxAmount > 0) totalRows.push(['Imposto', totals.taxAmount])
   if (totals.surchargeAmount > 0) totalRows.push(['Acréscimo', totals.surchargeAmount])
 
+  doc.setFontSize(9.5)
   totalRows.forEach(([label, value]) => {
     doc.setFont('helvetica', 'normal')
     doc.setTextColor(90)
-    doc.text(label, totalsX - 140, y, { align: 'left' })
+    doc.text(label, totalBlockX, y, { align: 'left' })
     doc.text(formatCurrency(value), totalsX, y, { align: 'right' })
     y += 15
   })
+
+  doc.setDrawColor(47, 128, 237)
+  doc.setLineWidth(1.5)
+  doc.line(totalBlockX, y, totalsX, y)
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(12)
-  doc.setTextColor(20)
-  doc.text('Total', totalsX - 140, y + 4, { align: 'left' })
-  doc.text(formatCurrency(totals.total), totalsX, y + 4, { align: 'right' })
-  y += 30
+  doc.setTextColor(30, 25, 22)
+  doc.text('Total', totalBlockX, y + 24, { align: 'left' })
+  doc.setFontSize(18)
+  doc.setTextColor(47, 128, 237)
+  doc.text(formatCurrency(totals.total), totalsX, y + 24, { align: 'right' })
+  y += 48
 
   if (invoice.installments.length > 1) {
     doc.setFont('helvetica', 'bold')
@@ -204,7 +241,20 @@ export function generateInvoicePdf(invoice: Invoice, client: Client | undefined,
       columnStyles: { 2: { halign: 'center' } },
     })
     // @ts-expect-error jspdf-autotable augments doc at runtime
-    y = doc.lastAutoTable.finalY + 20
+    y = doc.lastAutoTable.finalY + 18
+    const remaining = Math.max(invoiceRemaining(invoice, payments), 0)
+    doc.setDrawColor(210, 216, 224)
+    doc.setLineWidth(0.7)
+    doc.line(pageWidth - MARGIN - 170, y, pageWidth - MARGIN, y)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(9)
+    doc.setTextColor(100)
+    doc.text('Saldo restante', pageWidth - MARGIN - 170, y + 15, { align: 'left' })
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(11)
+    doc.setTextColor(37, 99, 235)
+    doc.text(formatCurrency(remaining), pageWidth - MARGIN, y + 15, { align: 'right' })
+    y += 34
   }
 
   if (company.pixKey) {

@@ -3,7 +3,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, ensureCompanyProfile } from '../../db/db'
 import { Page, PageHeader, Field, Input, Select, Textarea, Button, Card } from '../../components/ui'
-import type { AdjustmentValue, Invoice, InvoiceItem, ServiceType } from '../../db/types'
+import type { AdjustmentValue, ApprovalStatus, Client, Invoice, InvoiceItem, ServiceType } from '../../db/types'
 import { computeInvoiceTotals, distributeInstallments } from '../../lib/calculations'
 import { formatCurrency, todayIso } from '../../lib/format'
 
@@ -26,6 +26,7 @@ export default function InvoiceForm() {
   const [clientId, setClientId] = useState(location.state?.clientId ?? '')
   const [issueDate, setIssueDate] = useState(todayIso())
   const [dueDate, setDueDate] = useState(todayIso())
+  const [approvalStatus, setApprovalStatus] = useState<ApprovalStatus>('pendente')
   const [items, setItems] = useState<InvoiceItem[]>([emptyItem()])
   const [discount, setDiscount] = useState<AdjustmentValue>({ type: 'fixed', value: 0 })
   const [tax, setTax] = useState<AdjustmentValue>({ type: 'fixed', value: 0 })
@@ -36,6 +37,11 @@ export default function InvoiceForm() {
   const [existingInvoice, setExistingInvoice] = useState<Invoice | null>(null)
   const [saving, setSaving] = useState(false)
   const [hasPayments, setHasPayments] = useState(false)
+  const [quickClientOpen, setQuickClientOpen] = useState(false)
+  const [quickClientName, setQuickClientName] = useState('')
+  const [quickClientPhone, setQuickClientPhone] = useState('')
+  const [quickClientDocument, setQuickClientDocument] = useState('')
+  const [quickClientSaving, setQuickClientSaving] = useState(false)
 
   useEffect(() => {
     if (!id) return
@@ -45,6 +51,7 @@ export default function InvoiceForm() {
       setClientId(inv.clientId)
       setIssueDate(inv.issueDate)
       setDueDate(inv.installments[0]?.dueDate ?? inv.dueDate)
+      setApprovalStatus(inv.approvalStatus ?? 'pendente')
       setItems(inv.items)
       setDiscount(inv.discount)
       setTax(inv.tax)
@@ -62,6 +69,31 @@ export default function InvoiceForm() {
   }, [id])
 
   const totals = useMemo(() => computeInvoiceTotals({ items, discount, tax, surcharge }), [items, discount, tax, surcharge])
+
+  async function handleQuickClient() {
+    const name = quickClientName.trim()
+    if (!name) return alert('Informe o nome do cliente.')
+    setQuickClientSaving(true)
+    try {
+      const now = new Date().toISOString()
+      const client: Client = {
+        id: crypto.randomUUID(),
+        name,
+        phone: quickClientPhone.trim() || undefined,
+        document: quickClientDocument.trim() || undefined,
+        createdAt: now,
+        updatedAt: now,
+      }
+      await db.clients.put(client)
+      setClientId(client.id)
+      setQuickClientName('')
+      setQuickClientPhone('')
+      setQuickClientDocument('')
+      setQuickClientOpen(false)
+    } finally {
+      setQuickClientSaving(false)
+    }
+  }
 
   function updateItem(itemId: string, patch: Partial<InvoiceItem>) {
     setItems((prev) => prev.map((it) => (it.id === itemId ? { ...it, ...patch } : it)))
@@ -108,6 +140,7 @@ export default function InvoiceForm() {
           tax,
           surcharge,
           installments,
+          approvalStatus,
           notes,
           updatedAt: now,
         }
@@ -126,6 +159,7 @@ export default function InvoiceForm() {
           tax,
           surcharge,
           installments,
+          approvalStatus,
           notes,
           status: 'pendente',
           createdAt: now,
@@ -145,16 +179,51 @@ export default function InvoiceForm() {
       <PageHeader title={isEdit ? 'Editar orçamento' : 'Novo orçamento'} back={isEdit ? `/invoices/${id}` : '/invoices'} />
       <Page>
         <form onSubmit={handleSubmit} className="pb-4">
-          <Field label="Cliente *">
-            <Select value={clientId} onChange={(e) => setClientId(e.target.value)} required>
-              <option value="">Selecione um cliente</option>
-              {clients?.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </Select>
-          </Field>
+          <div className="flex items-end gap-2">
+            <div className="flex-1">
+              <Field label="Cliente *">
+                <Select value={clientId} onChange={(e) => setClientId(e.target.value)} required>
+                  <option value="">Selecione um cliente</option>
+                  {clients?.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            </div>
+            <Button type="button" variant="secondary" onClick={() => setQuickClientOpen((open) => !open)} className="mb-3 whitespace-nowrap px-3">
+              + Novo cliente
+            </Button>
+          </div>
+
+          {quickClientOpen && (
+            <Card className="mb-4 border-blue-100 bg-blue-50/50">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">Cadastro rápido</p>
+                  <p className="text-xs text-slate-500">O cliente será selecionado automaticamente.</p>
+                </div>
+                <button type="button" onClick={() => setQuickClientOpen(false)} className="text-xs text-slate-500">
+                  Fechar
+                </button>
+              </div>
+              <Field label="Nome *">
+                <Input value={quickClientName} onChange={(e) => setQuickClientName(e.target.value)} placeholder="Nome do cliente" autoFocus />
+              </Field>
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="Telefone">
+                  <Input value={quickClientPhone} onChange={(e) => setQuickClientPhone(e.target.value)} placeholder="(00) 00000-0000" />
+                </Field>
+                <Field label="CPF/CNPJ">
+                  <Input value={quickClientDocument} onChange={(e) => setQuickClientDocument(e.target.value)} placeholder="Opcional" />
+                </Field>
+              </div>
+              <Button type="button" full onClick={handleQuickClient} disabled={quickClientSaving}>
+                {quickClientSaving ? 'Salvando…' : 'Cadastrar e selecionar'}
+              </Button>
+            </Card>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <Field label="Emissão">
@@ -164,6 +233,14 @@ export default function InvoiceForm() {
               <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
             </Field>
           </div>
+
+          <Field label="Retorno do cliente">
+            <Select value={approvalStatus} onChange={(e) => setApprovalStatus(e.target.value as ApprovalStatus)}>
+              <option value="pendente">Aguardando resposta</option>
+              <option value="aprovado">Orçamento aprovado</option>
+              <option value="recusado">Orçamento recusado</option>
+            </Select>
+          </Field>
 
           <h2 className="text-sm font-semibold text-slate-500 mt-2 mb-2">Itens</h2>
           {serviceTypes && serviceTypes.length > 0 && (

@@ -4,10 +4,10 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { db, ensureCompanyProfile } from '../../db/db'
 import { Page, PageHeader, Card, Button, Badge, Sheet, Field, Input, Select, Textarea } from '../../components/ui'
 import PdfPreviewSheet from '../../components/PdfPreviewSheet'
-import { formatCurrency, formatDate, invoicePdfFileName, paymentMethodLabel, receiptPdfFileName, statusColor, statusLabel, todayIso } from '../../lib/format'
+import { approvalStatusColor, formatCurrency, formatDate, invoicePdfFileName, paymentMethodLabel, statusColor, statusLabel, todayIso } from '../../lib/format'
 import { computeInvoiceStatus, computeInvoiceTotals, getInstallmentPaymentInfo, invoiceReceivedAmount, invoiceTotal, itemTotal } from '../../lib/calculations'
 import { whatsappLink, mailtoLink, downloadPdf, sharePdf } from '../../lib/share'
-import type { Payment, PaymentMethod } from '../../db/types'
+import type { ApprovalStatus, Payment, PaymentMethod } from '../../db/types'
 
 export default function InvoiceDetail() {
   const { id } = useParams()
@@ -17,6 +17,7 @@ export default function InvoiceDetail() {
   const [shareBusy, setShareBusy] = useState<'whatsapp' | 'email' | 'generic' | null>(null)
   const [previewBusy, setPreviewBusy] = useState(false)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [previewTitle, setPreviewTitle] = useState('')
   const [receiptBusyId, setReceiptBusyId] = useState<string | null>(null)
 
   const invoice = useLiveQuery(() => (id ? db.invoices.get(id) : undefined), [id])
@@ -35,10 +36,15 @@ export default function InvoiceDetail() {
   const received = invoiceReceivedAmount(invoice, payments)
   const total = invoiceTotal(invoice)
   const remaining = total - received
+  const approvalStatus = invoice.approvalStatus ?? 'pendente'
 
   function openPaySheet(installmentId?: string) {
     setSelectedInstallmentId(installmentId ?? invoice!.installments.find((inst) => !getInstallmentPaymentInfo(inst, payments!).isPaid)?.id ?? null)
     setPaySheetOpen(true)
+  }
+
+  async function updateApprovalStatus(next: ApprovalStatus) {
+    await db.invoices.update(invoice!.id, { approvalStatus: next, updatedAt: new Date().toISOString() })
   }
 
   async function handleShareTo(target: 'whatsapp' | 'email' | 'generic') {
@@ -50,7 +56,7 @@ export default function InvoiceDetail() {
       const title = `Orçamento #${invoice!.number}`
       const text =
         target === 'whatsapp'
-          ? `Olá${client?.name ? ' ' + client.name : ''}! Segue o orçamento #${invoice!.number} no valor de ${formatCurrency(total)}.`
+          ? `Olá${client?.name ? ' ' + client.name : ''}! Encaminho o orçamento para sua apreciação. Fico à disposição para quaisquer esclarecimentos.`
           : title
       const result = await sharePdf(doc, invoicePdfFileName(invoice!), title, text)
       if (result === 'downloaded') {
@@ -83,6 +89,7 @@ export default function InvoiceDetail() {
       const { generateInvoicePdf } = await import('../../lib/pdf')
       const company = await ensureCompanyProfile()
       const doc = generateInvoicePdf(invoice!, client, company, payments!)
+      setPreviewTitle(`Orçamento #${invoice!.number}`)
       setPreviewUrl(URL.createObjectURL(doc.output('blob')))
     } catch {
       alert('Não foi possível gerar a visualização.')
@@ -99,13 +106,11 @@ export default function InvoiceDetail() {
   async function handleReceipt(payment: Payment) {
     setReceiptBusyId(payment.id)
     try {
-      const [{ generateReceiptPdf }, { shareReceiptPdf }] = await Promise.all([import('../../lib/pdf'), import('../../lib/share')])
+      const { generateReceiptPdf } = await import('../../lib/pdf')
       const company = await ensureCompanyProfile()
       const doc = generateReceiptPdf(invoice!, client, company, payment)
-      const result = await shareReceiptPdf(doc, invoice!, client, payment, receiptPdfFileName(invoice!, payment.date))
-      if (result === 'downloaded') {
-        alert('O recibo foi baixado. Use os botões acima para abrir o WhatsApp ou e-mail e anexe o arquivo baixado.')
-      }
+      setPreviewTitle(`Recibo - Orçamento #${invoice!.number}`)
+      setPreviewUrl(URL.createObjectURL(doc.output('blob')))
     } catch (err) {
       if ((err as Error)?.name !== 'AbortError') alert('Não foi possível gerar o recibo.')
     } finally {
@@ -146,7 +151,19 @@ export default function InvoiceDetail() {
                 Emissão {formatDate(invoice.issueDate)} · Vencimento {formatDate(invoice.installments[0]?.dueDate ?? invoice.dueDate)}
               </p>
             </div>
-            <Badge className={statusColor(status ?? invoice.status)}>{statusLabel(status ?? invoice.status)}</Badge>
+            <div className="flex items-center gap-2">
+              <Badge className={statusColor(status ?? invoice.status)}>{statusLabel(status ?? invoice.status)}</Badge>
+              <Select
+                value={approvalStatus}
+                onChange={(e) => updateApprovalStatus(e.target.value as ApprovalStatus)}
+                className={`w-auto min-w-0 py-1.5 text-xs font-semibold ${approvalStatusColor(approvalStatus)}`}
+                aria-label="Status de aprovação do orçamento"
+              >
+                <option value="pendente">Aguardando resposta</option>
+                <option value="aprovado">Aprovado</option>
+                <option value="recusado">Recusado</option>
+              </Select>
+            </div>
           </div>
           <div className="grid grid-cols-3 gap-2 text-center">
             <div>
@@ -262,7 +279,7 @@ export default function InvoiceDetail() {
                     <span className="text-sm font-medium text-green-600">{formatCurrency(p.amount)}</span>
                     <button
                       className="text-slate-400 p-1"
-                      aria-label="Gerar recibo"
+                      aria-label="Visualizar recibo em PDF"
                       disabled={receiptBusyId === p.id}
                       onClick={() => handleReceipt(p)}
                     >
@@ -323,7 +340,7 @@ export default function InvoiceDetail() {
         preselectedInstallmentId={selectedInstallmentId}
       />
 
-      <PdfPreviewSheet url={previewUrl} title={`Orçamento #${invoice.number}`} onClose={closePreview} />
+      <PdfPreviewSheet url={previewUrl} title={previewTitle} onClose={closePreview} />
     </>
   )
 }

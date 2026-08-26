@@ -44,6 +44,18 @@ export function statusColor(status: string): string {
   return map[status] ?? 'bg-gray-100 text-gray-700'
 }
 
+export function approvalStatusLabel(status: string | undefined): string {
+  if (status === 'aprovado') return 'Aprovado'
+  if (status === 'recusado') return 'Recusado'
+  return 'Pendente'
+}
+
+export function approvalStatusColor(status: string | undefined): string {
+  if (status === 'aprovado') return 'bg-emerald-100 text-emerald-700'
+  if (status === 'recusado') return 'bg-rose-100 text-rose-700'
+  return 'bg-slate-100 text-slate-600'
+}
+
 export function paymentMethodLabel(method: string): string {
   const map: Record<string, string> = {
     pix: 'Pix',

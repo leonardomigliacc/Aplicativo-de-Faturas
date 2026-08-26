@@ -46,6 +46,7 @@ export interface Payment {
 }
 
 export type InvoiceStatus = 'rascunho' | 'pendente' | 'parcial' | 'pago' | 'atrasado' | 'cancelado'
+export type ApprovalStatus = 'pendente' | 'aprovado' | 'recusado'
 
 export interface Invoice {
   id: string
@@ -58,6 +59,7 @@ export interface Invoice {
   tax: AdjustmentValue
   surcharge: AdjustmentValue
   installments: Installment[]
+  approvalStatus?: ApprovalStatus
   notes?: string
   status: InvoiceStatus
   createdAt: string

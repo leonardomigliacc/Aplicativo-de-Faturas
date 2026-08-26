@@ -3,12 +3,13 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { Link } from 'react-router-dom'
 import { db } from '../../db/db'
 import { Page, PageHeader, Card, Select, Input, Badge, EmptyState, FAB } from '../../components/ui'
-import { formatCurrency, formatDate, statusColor, statusLabel } from '../../lib/format'
+import { approvalStatusColor, approvalStatusLabel, formatCurrency, formatDate, statusColor, statusLabel } from '../../lib/format'
 import { computeInvoiceStatus, invoiceTotal } from '../../lib/calculations'
-import type { InvoiceStatus } from '../../db/types'
+import type { ApprovalStatus, InvoiceStatus } from '../../db/types'
 
 export default function InvoiceList() {
   const [statusFilter, setStatusFilter] = useState<InvoiceStatus | 'todas'>('todas')
+  const [approvalFilter, setApprovalFilter] = useState<ApprovalStatus | 'todos'>('todos')
   const [clientFilter, setClientFilter] = useState<string>('todos')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
@@ -22,7 +23,7 @@ export default function InvoiceList() {
     const clientById = new Map(clients.map((c) => [c.id, c]))
     const withStatus = invoices.map((inv) => {
       const status = computeInvoiceStatus(inv, payments)
-      return { invoice: inv, status, client: clientById.get(inv.clientId) }
+      return { invoice: inv, status, approvalStatus: inv.approvalStatus ?? 'pendente', client: clientById.get(inv.clientId) }
     })
     return withStatus.sort((a, b) => b.invoice.number - a.invoice.number)
   }, [])
@@ -38,19 +39,21 @@ export default function InvoiceList() {
 
   const filtered = useMemo(() => {
     if (!data) return []
-    return data.filter(({ invoice, status }) => {
+    return data.filter(({ invoice, status, approvalStatus }) => {
       if (statusFilter !== 'todas' && status !== statusFilter) return false
+      if (approvalFilter !== 'todos' && approvalStatus !== approvalFilter) return false
       if (clientFilter !== 'todos' && invoice.clientId !== clientFilter) return false
       if (dateFrom && invoice.issueDate < dateFrom) return false
       if (dateTo && invoice.issueDate > dateTo) return false
       return true
     })
-  }, [data, statusFilter, clientFilter, dateFrom, dateTo])
+  }, [data, statusFilter, approvalFilter, clientFilter, dateFrom, dateTo])
 
-  const hasActiveFilters = statusFilter !== 'todas' || clientFilter !== 'todos' || dateFrom || dateTo
+  const hasActiveFilters = statusFilter !== 'todas' || approvalFilter !== 'todos' || clientFilter !== 'todos' || dateFrom || dateTo
 
   function clearFilters() {
     setStatusFilter('todas')
+    setApprovalFilter('todos')
     setClientFilter('todos')
     setDateFrom('')
     setDateTo('')
@@ -71,7 +74,15 @@ export default function InvoiceList() {
               <option value="rascunho">Rascunho</option>
               <option value="cancelado">Cancelado</option>
             </Select>
-            <Select value={clientFilter} onChange={(e) => setClientFilter(e.target.value)}>
+            <Select value={approvalFilter} onChange={(e) => setApprovalFilter(e.target.value as ApprovalStatus | 'todos')}>
+              <option value="todos">Todas as aprovações</option>
+              <option value="pendente">Aguardando resposta</option>
+              <option value="aprovado">Aprovados</option>
+              <option value="recusado">Recusados</option>
+            </Select>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <Select className="col-span-2" value={clientFilter} onChange={(e) => setClientFilter(e.target.value)}>
               <option value="todos">Todos os clientes</option>
               {clientOptions.map(([id, name]) => (
                 <option key={id} value={id}>
@@ -105,7 +116,7 @@ export default function InvoiceList() {
         )}
 
         <div className="space-y-2">
-          {filtered.map(({ invoice, status, client }) => (
+          {filtered.map(({ invoice, status, approvalStatus, client }) => (
             <Link key={invoice.id} to={`/invoices/${invoice.id}`}>
               <Card className="flex items-center justify-between active:bg-slate-50">
                 <div className="min-w-0">
@@ -116,7 +127,10 @@ export default function InvoiceList() {
                 </div>
                 <div className="text-right shrink-0 ml-2">
                   <p className="font-semibold text-slate-900">{formatCurrency(invoiceTotal(invoice))}</p>
-                  <Badge className={statusColor(status)}>{statusLabel(status)}</Badge>
+                  <div className="flex flex-wrap justify-end gap-1">
+                    <Badge className={statusColor(status)}>{statusLabel(status)}</Badge>
+                    <Badge className={approvalStatusColor(approvalStatus)}>{approvalStatusLabel(approvalStatus)}</Badge>
+                  </div>
                 </div>
               </Card>
             </Link>

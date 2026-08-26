@@ -1,12 +1,9 @@
 import type { jsPDF } from 'jspdf'
 import type { Client, Invoice, Payment } from '../db/types'
-import { formatCurrency, formatDate } from './format'
-import { invoiceTotal } from './calculations'
+import { formatCurrency } from './format'
 
-function buildMessage(invoice: Invoice, client: Client | undefined): string {
-  return `Olá${client?.name ? ' ' + client.name : ''}! Segue o orçamento #${invoice.number} no valor de ${formatCurrency(
-    invoiceTotal(invoice),
-  )}, com vencimento em ${formatDate(invoice.installments[0]?.dueDate ?? invoice.dueDate)}.`
+function buildMessage(client: Client | undefined): string {
+  return `Olá${client?.name ? ' ' + client.name : ''}! Encaminho o orçamento para sua apreciação. Fico à disposição para quaisquer esclarecimentos.`
 }
 
 function buildReceiptMessage(invoice: Invoice, client: Client | undefined, payment: Payment): string {
@@ -27,7 +24,7 @@ export async function sharePdf(doc: jsPDF, fileName: string, title: string, text
 }
 
 export async function shareInvoicePdf(doc: jsPDF, invoice: Invoice, client: Client | undefined, fileName: string) {
-  return sharePdf(doc, fileName, `Orçamento #${invoice.number}`, buildMessage(invoice, client))
+  return sharePdf(doc, fileName, `Orçamento #${invoice.number}`, buildMessage(client))
 }
 
 export async function shareReceiptPdf(doc: jsPDF, invoice: Invoice, client: Client | undefined, payment: Payment, fileName: string) {
@@ -38,14 +35,14 @@ export function downloadPdf(doc: jsPDF, fileName: string) {
   doc.save(fileName)
 }
 
-export function whatsappLink(invoice: Invoice, client: Client | undefined): string {
-  const text = encodeURIComponent(buildMessage(invoice, client) + ' Vou te enviar o PDF em seguida.')
+export function whatsappLink(_invoice: Invoice, client: Client | undefined): string {
+  const text = encodeURIComponent(buildMessage(client) + ' Vou te enviar o PDF em seguida.')
   const phone = client?.phone?.replace(/\D/g, '')
   return phone ? `https://wa.me/55${phone}?text=${text}` : `https://wa.me/?text=${text}`
 }
 
 export function mailtoLink(invoice: Invoice, client: Client | undefined): string {
   const subject = encodeURIComponent(`Orçamento #${invoice.number}`)
-  const body = encodeURIComponent(buildMessage(invoice, client) + '\n\n(PDF anexado)')
+  const body = encodeURIComponent(buildMessage(client) + '\n\n(PDF anexado)')
   return `mailto:${client?.email ?? ''}?subject=${subject}&body=${body}`
 }
