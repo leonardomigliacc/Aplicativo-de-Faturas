@@ -16,7 +16,7 @@ import {
   todayIso,
 } from '../../lib/format'
 import { computeInvoiceStatus, computeInvoiceTotals, getInstallmentPaymentInfo, invoiceReceivedAmount, invoiceTotal, itemTotal } from '../../lib/calculations'
-import { whatsappLink, mailtoLink, downloadPdf, sharePdf } from '../../lib/share'
+import { whatsappLink, mailtoLink, downloadPdf, sharePdf, shareReceiptPdf } from '../../lib/share'
 import type { ApprovalStatus, Payment, PaymentMethod } from '../../db/types'
 
 export default function InvoiceDetail() {
@@ -90,7 +90,7 @@ export default function InvoiceDetail() {
         setPreviewUrl(result.url)
       }
     } catch (err) {
-      if ((err as Error)?.name !== 'AbortError') alert('Não foi possível compartilhar. Tente baixar o PDF.')
+      if ((err as Error)?.name !== 'AbortError') alert(`Não foi possível compartilhar.\n${(err as Error)?.message ?? err}`)
     } finally {
       setShareBusy(null)
     }
@@ -115,8 +115,8 @@ export default function InvoiceDetail() {
       setPreviewTitle(`Orçamento #${invoice!.number}`)
       setPreviewFileName(invoicePdfFileName(invoice!))
       setPreviewUrl(URL.createObjectURL(doc.output('blob')))
-    } catch {
-      alert('Não foi possível gerar a visualização.')
+    } catch (err) {
+      alert(`Não foi possível gerar a visualização.\n${(err as Error)?.message ?? err}`)
     } finally {
       setPreviewBusy(false)
     }
@@ -134,11 +134,21 @@ export default function InvoiceDetail() {
       const { generateReceiptPdf } = await import('../../lib/pdf')
       const company = await ensureCompanyProfile()
       const doc = generateReceiptPdf(invoice!, client, company, payment)
-      setPreviewTitle(`Recibo - Orçamento #${invoice!.number}`)
-      setPreviewFileName(receiptPdfFileName(invoice!, payment.date))
-      setPreviewUrl(URL.createObjectURL(doc.output('blob')))
+      const fileName = receiptPdfFileName(invoice!, payment.date)
+      // Try the native share sheet first (custom message, no stray URL). Only fall back to
+      // opening the plain preview — where Safari's own share button leaks a "blob:" link
+      // alongside the file, since it has no way to attach our custom text — if that's
+      // unavailable.
+      const result = await shareReceiptPdf(doc, invoice!, client, payment, fileName)
+      if (result.status === 'downloaded') {
+        alert('O recibo foi baixado. Anexe o arquivo manualmente no app que preferir.')
+      } else if (result.status === 'manual') {
+        setPreviewTitle(`Recibo - Orçamento #${invoice!.number}`)
+        setPreviewFileName(fileName)
+        setPreviewUrl(result.url)
+      }
     } catch (err) {
-      if ((err as Error)?.name !== 'AbortError') alert('Não foi possível gerar o recibo.')
+      if ((err as Error)?.name !== 'AbortError') alert(`Não foi possível gerar o recibo.\n${(err as Error)?.message ?? err}`)
     } finally {
       setReceiptBusyId(null)
     }
@@ -305,7 +315,7 @@ export default function InvoiceDetail() {
                     <span className="text-sm font-medium text-green-600">{formatCurrency(p.amount)}</span>
                     <button
                       className="text-slate-400 p-1"
-                      aria-label="Visualizar recibo em PDF"
+                      aria-label="Compartilhar recibo em PDF"
                       disabled={receiptBusyId === p.id}
                       onClick={() => handleReceipt(p)}
                     >
