@@ -1,10 +1,20 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { db, ensureCompanyProfile } from '../../db/db'
 import { Page, PageHeader, Card, Button, Badge, Sheet, Field, Input, Select, Textarea } from '../../components/ui'
 import PdfPreviewSheet from '../../components/PdfPreviewSheet'
-import { approvalStatusColor, formatCurrency, formatDate, invoicePdfFileName, paymentMethodLabel, statusColor, statusLabel, todayIso } from '../../lib/format'
+import {
+  approvalStatusColor,
+  formatCurrency,
+  formatDate,
+  invoicePdfFileName,
+  paymentMethodLabel,
+  receiptPdfFileName,
+  statusColor,
+  statusLabel,
+  todayIso,
+} from '../../lib/format'
 import { computeInvoiceStatus, computeInvoiceTotals, getInstallmentPaymentInfo, invoiceReceivedAmount, invoiceTotal, itemTotal } from '../../lib/calculations'
 import { whatsappLink, mailtoLink, downloadPdf, sharePdf } from '../../lib/share'
 import type { ApprovalStatus, Payment, PaymentMethod } from '../../db/types'
@@ -18,7 +28,15 @@ export default function InvoiceDetail() {
   const [previewBusy, setPreviewBusy] = useState(false)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [previewTitle, setPreviewTitle] = useState('')
+  const [previewFileName, setPreviewFileName] = useState<string | undefined>(undefined)
   const [receiptBusyId, setReceiptBusyId] = useState<string | null>(null)
+
+  useEffect(() => {
+    // Warm the lazy chunks before the user taps a share button: fetching them at click time can
+    // eat up iOS's brief "user activation" window, which makes navigator.share() silently no-op.
+    import('../../lib/pdf')
+    import('../../lib/share')
+  }, [])
 
   const invoice = useLiveQuery(() => (id ? db.invoices.get(id) : undefined), [id])
   const client = useLiveQuery(() => (invoice ? db.clients.get(invoice.clientId) : undefined), [invoice])
@@ -58,13 +76,18 @@ export default function InvoiceDetail() {
         target === 'whatsapp'
           ? `Olá${client?.name ? ' ' + client.name : ''}! Encaminho o orçamento para sua apreciação. Fico à disposição para quaisquer esclarecimentos.`
           : title
-      const result = await sharePdf(doc, invoicePdfFileName(invoice!), title, text)
-      if (result === 'downloaded') {
+      const fileName = invoicePdfFileName(invoice!)
+      const result = await sharePdf(doc, fileName, title, text)
+      if (result.status === 'downloaded') {
         // Web Share with files isn't supported here (e.g. desktop browser) — fall back to a
         // text-only deep link and let the user attach the file that was just downloaded.
         if (target === 'whatsapp') window.open(whatsappLink(invoice!, client), '_blank')
         else if (target === 'email') window.location.href = mailtoLink(invoice!, client)
         else alert('O PDF foi baixado. Anexe o arquivo manualmente no app que preferir.')
+      } else if (result.status === 'manual') {
+        setPreviewTitle(title)
+        setPreviewFileName(fileName)
+        setPreviewUrl(result.url)
       }
     } catch (err) {
       if ((err as Error)?.name !== 'AbortError') alert('Não foi possível compartilhar. Tente baixar o PDF.')
@@ -90,6 +113,7 @@ export default function InvoiceDetail() {
       const company = await ensureCompanyProfile()
       const doc = generateInvoicePdf(invoice!, client, company, payments!)
       setPreviewTitle(`Orçamento #${invoice!.number}`)
+      setPreviewFileName(invoicePdfFileName(invoice!))
       setPreviewUrl(URL.createObjectURL(doc.output('blob')))
     } catch {
       alert('Não foi possível gerar a visualização.')
@@ -101,6 +125,7 @@ export default function InvoiceDetail() {
   function closePreview() {
     if (previewUrl) URL.revokeObjectURL(previewUrl)
     setPreviewUrl(null)
+    setPreviewFileName(undefined)
   }
 
   async function handleReceipt(payment: Payment) {
@@ -110,6 +135,7 @@ export default function InvoiceDetail() {
       const company = await ensureCompanyProfile()
       const doc = generateReceiptPdf(invoice!, client, company, payment)
       setPreviewTitle(`Recibo - Orçamento #${invoice!.number}`)
+      setPreviewFileName(receiptPdfFileName(invoice!, payment.date))
       setPreviewUrl(URL.createObjectURL(doc.output('blob')))
     } catch (err) {
       if ((err as Error)?.name !== 'AbortError') alert('Não foi possível gerar o recibo.')
@@ -340,7 +366,7 @@ export default function InvoiceDetail() {
         preselectedInstallmentId={selectedInstallmentId}
       />
 
-      <PdfPreviewSheet url={previewUrl} title={previewTitle} onClose={closePreview} />
+      <PdfPreviewSheet url={previewUrl} title={previewTitle} fileName={previewFileName} onClose={closePreview} />
     </>
   )
 }

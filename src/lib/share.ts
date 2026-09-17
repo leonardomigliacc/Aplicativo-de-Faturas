@@ -10,17 +10,38 @@ function buildReceiptMessage(invoice: Invoice, client: Client | undefined, payme
   return `Olá${client?.name ? ' ' + client.name : ''}! Segue o recibo do pagamento de ${formatCurrency(payment.amount)} referente ao orçamento #${invoice.number}.`
 }
 
-export async function sharePdf(doc: jsPDF, fileName: string, title: string, text: string) {
+export type ShareResult = { status: 'shared' } | { status: 'downloaded' } | { status: 'manual'; url: string }
+
+function isIOS(): boolean {
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+}
+
+export async function sharePdf(doc: jsPDF, fileName: string, title: string, text: string): Promise<ShareResult> {
   const blob = doc.output('blob')
   const file = new File([blob], fileName, { type: 'application/pdf' })
 
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
-    await navigator.share({ files: [file], title, text })
-    return 'shared' as const
+    try {
+      await navigator.share({ files: [file], title, text })
+      return { status: 'shared' }
+    } catch (err) {
+      // Some iOS versions (notably installed home-screen PWAs) report file sharing as supported
+      // but the native share sheet never appears — fall through to a manual open instead of
+      // surfacing an error for what looks like a successful share.
+      if ((err as Error)?.name === 'AbortError') throw err
+    }
+  }
+
+  if (isIOS()) {
+    // On iOS, jsPDF's doc.save() (an <a download> click) just navigates the current page to the
+    // blob instead of downloading — inside a standalone PWA that leaves the user stuck with no
+    // way to share. Hand back an object URL so the caller can offer a real, user-tapped link
+    // that opens in Safari's own PDF viewer (which has its own native Share button).
+    return { status: 'manual', url: URL.createObjectURL(blob) }
   }
 
   downloadPdf(doc, fileName)
-  return 'downloaded' as const
+  return { status: 'downloaded' }
 }
 
 export async function shareInvoicePdf(doc: jsPDF, invoice: Invoice, client: Client | undefined, fileName: string) {
